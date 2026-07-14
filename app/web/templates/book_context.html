@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Book Context · {{ context.book_title }} · BiteLearning{% endblock %}
+{% block content %}
+<div class="book-header">
+  <div><h1>Book Context</h1></div>
+</div>
+<p class="topic-summary">Your goal and familiarity for <strong>{{ context.book_title }}</strong> - shapes emphasis, depth, and what gets skipped when the plan is generated.</p>
+
+{% if saved %}<p class="status-line" style="color: var(--moss);">Saved.</p>{% endif %}
+
+<form class="add-book-form" method="post" action="/books/{{ context.book_id }}/context">
+  <label class="field">
+    <span class="field-label">Goal for this book</span>
+    <textarea name="goal" rows="2" placeholder="Why are you reading this book, specifically?">{{ context.goal }}</textarea>
+  </label>
+  <label class="field">
+    <span class="field-label">Prior familiarity</span>
+    <textarea name="prior_familiarity" rows="2" placeholder="What do you already know about this subject?">{{ context.prior_familiarity }}</textarea>
+  </label>
+  <label class="field">
+    <span class="field-label">Focus areas</span>
+    <textarea name="focus_areas" rows="2" placeholder="Anything you want emphasized">{{ context.focus_areas }}</textarea>
+  </label>
+  <label class="field">
+    <span class="field-label">Areas to skip</span>
+    <textarea name="skip_areas" rows="2" placeholder="Anything you already know well or don't need">{{ context.skip_areas }}</textarea>
+  </label>
+  <div style="display: flex; align-items: center; gap: 16px;">
+    <button class="mark-complete" type="submit">Save</button>
+    <a href="/books/{{ context.book_id }}" class="context-link">Back to book</a>
+  </div>
+</form>
+{% endblock %}

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}BiteLearning{% endblock %}</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand"><span class="mark">&#9670;</span> BiteLearning</div>
+
+    <div>
+      <div class="eyebrow" style="margin-bottom: 8px;">Library</div>
+      <div class="library">
+        {% for book in books %}
+        <a class="book-item{% if book.id == active_book_id %} active{% endif %}" href="/books/{{ book.id }}">
+          <div class="book-title">{{ book.title }}</div>
+          <div class="mini-progress">
+            <div class="track"><div class="fill" style="width: {{ (book.completed_count / book.total_lessons * 100) if book.total_lessons else 0 }}%;"></div></div>
+            <div class="frac">{{ book.completed_count }}/{{ book.total_lessons }}</div>
+          </div>
+        </a>
+        {% endfor %}
+        <a class="add-book" href="/books/new"><span class="plus">+</span> Add a book</a>
+      </div>
+    </div>
+
+    <div class="sidebar-footer">
+      <a class="footer-link" href="/profile"><span class="icon">&#9881;</span> Learner profile</a>
+    </div>
+  </aside>
+
+  <main class="main">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

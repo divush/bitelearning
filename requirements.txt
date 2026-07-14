@@ -1,0 +1,16 @@
+fastapi
+uvicorn[standard]
+jinja2
+python-multipart
+sqlalchemy
+pymupdf
+tiktoken
+langchain
+langchain-openai
+langchain-community
+ddgs
+langgraph
+python-dotenv
+pytest
+httpx
+markdown

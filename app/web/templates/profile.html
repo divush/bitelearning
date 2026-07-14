@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Learner Profile · BiteLearning{% endblock %}
+{% block content %}
+<div class="book-header">
+  <div><h1>Learner Profile</h1></div>
+</div>
+<p class="topic-summary">Applied by default to every book, unless a book's own context overrides it.</p>
+
+{% if saved %}<p class="status-line" style="color: var(--moss);">Saved.</p>{% endif %}
+
+<form class="add-book-form" method="post" action="/profile">
+  <label class="field">
+    <span class="field-label">Example-first vs. theory-first</span>
+    <textarea name="example_first_vs_theory_first" rows="2" placeholder="e.g. wants the core problem/motivation before the solution">{{ profile.example_first_vs_theory_first }}</textarea>
+  </label>
+  <label class="field">
+    <span class="field-label">Session length preference</span>
+    <input type="text" name="session_length_pref" value="{{ profile.session_length_pref }}" placeholder="e.g. 20-30 minutes" />
+  </label>
+  <label class="field">
+    <span class="field-label">Depth vs. breadth</span>
+    <textarea name="depth_vs_breadth" rows="2" placeholder="e.g. moderate-to-high depth, wants mechanics not just definitions">{{ profile.depth_vs_breadth }}</textarea>
+  </label>
+  <label class="field">
+    <span class="field-label">Tone preference</span>
+    <input type="text" name="tone_pref" value="{{ profile.tone_pref }}" placeholder="e.g. direct, no fluff" />
+  </label>
+  <label class="field">
+    <span class="field-label">Additional notes</span>
+    <textarea name="raw_notes" rows="4" placeholder="Anything else about how you like to learn">{{ profile.raw_notes }}</textarea>
+  </label>
+  <button class="mark-complete" type="submit">Save</button>
+</form>
+{% endblock %}

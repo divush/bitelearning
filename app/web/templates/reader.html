@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}{{ lesson.title }} · BiteLearning{% endblock %}
+{% block content %}
+<div class="reader-crumb">
+  <a class="back" href="/books/{{ lesson.book_id }}">&larr; Back to plan</a>
+  <span>Lesson {{ lesson.order_index + 1 }} of {{ lesson.total_lessons }}</span>
+</div>
+
+<div class="reader-col">
+  <h1>{{ lesson.title }}</h1>
+  <p class="topic-summary">{{ lesson.topic_summary }}</p>
+
+  {% if lesson.is_generated %}
+  <div class="prose">{{ lesson.content_markdown | markdown | safe }}</div>
+
+  {% if lesson.references %}
+  <div class="side-section">
+    <h2>References</h2>
+    {% for ref in lesson.references %}
+    <a class="ref-card" href="{{ ref.url }}" target="_blank" rel="noopener">
+      <div class="ref-title">{{ ref.title }}</div>
+      <div class="ref-url">{{ ref.url }}</div>
+      <div class="ref-why">{{ ref.why_relevant }}</div>
+    </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if lesson.exercises %}
+  <div class="side-section">
+    <h2>Practice Exercises</h2>
+    {% for ex in lesson.exercises %}
+    <div class="exercise">
+      <div class="num">{{ loop.index }}</div>
+      <div>
+        <div class="prompt">{{ ex.prompt }}</div>
+        {% if ex.guidance %}<div class="guidance"><span class="label">Guidance &mdash;</span> {{ ex.guidance }}</div>{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="completion-bar">
+    {% include "_complete_button.html" %}
+    <div class="lesson-nav">
+      {% if lesson.prev_title %}
+      <a href="/books/{{ lesson.book_id }}/lessons/{{ lesson.order_index - 1 }}">&larr; {{ lesson.prev_title }}</a>
+      {% else %}
+      <span class="disabled">&larr; Previous</span>
+      {% endif %}
+      {% if lesson.next_title %}
+      <a href="/books/{{ lesson.book_id }}/lessons/{{ lesson.order_index + 1 }}">{{ lesson.next_title }} &rarr;</a>
+      {% else %}
+      <span class="disabled">Next &rarr;</span>
+      {% endif %}
+    </div>
+  </div>
+  {% else %}
+  <p class="not-generated">This lesson hasn't been generated yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

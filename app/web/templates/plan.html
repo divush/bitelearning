@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}{{ workspace.title }} · BiteLearning{% endblock %}
+{% block content %}
+<div class="book-header">
+  <div>
+    <h1>{{ workspace.title }}</h1>
+    <a class="context-link" href="/books/{{ workspace.book_id }}/context">Edit book context</a>
+  </div>
+  <div class="book-meta">{{ workspace.num_pages }} pages &middot; {{ workspace.total_lessons }} lessons</div>
+</div>
+
+{% if workspace.plan_status == "complete" %}
+<div class="progress-block">
+  <div class="track"><div class="fill" style="width: {{ (workspace.completed_count / workspace.total_lessons * 100) if workspace.total_lessons else 0 }}%;"></div></div>
+  <div class="label">{{ workspace.completed_count }} of {{ workspace.total_lessons }} lessons complete</div>
+</div>
+{% endif %}
+
+{% include "_generation_status.html" %}
+
+<div class="plan-list">
+  {% for lesson in workspace.lessons %}
+  <a class="lesson-row" href="/books/{{ workspace.book_id }}/lessons/{{ lesson.order_index }}">
+    <span class="idx">{{ "%02d"|format(lesson.order_index + 1) }}</span>
+    <span class="status-chip{% if lesson.is_complete %} done{% elif lesson.is_generating %} generating{% elif lesson.is_failed %} failed{% endif %}">{% if lesson.is_complete %}&#10003;{% elif lesson.is_generating %}<span class="spinner small"></span>{% elif lesson.is_failed %}!{% endif %}</span>
+    <span class="title">{{ lesson.title }}{% if lesson.is_generating %} <em>(generating&hellip;)</em>{% elif lesson.is_failed %} <em>(failed)</em>{% elif not lesson.is_generated %} <em>(not generated yet)</em>{% endif %}</span>
+    <span class="chevron">&#8250;</span>
+  </a>
+  {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,33 @@
+<div
+  id="generation-status"
+  {% if workspace.plan_status == "generating" or workspace.lessons_generating %}
+  hx-get="/books/{{ workspace.book_id }}/status"
+  hx-trigger="every 3s"
+  hx-swap="outerHTML"
+  {% endif %}
+>
+  {% if workspace.plan_status is none %}
+  <form method="post" action="/books/{{ workspace.book_id }}/plan">
+    <button class="mark-complete" type="submit">Generate Plan</button>
+  </form>
+  {% elif workspace.plan_status == "generating" %}
+  <p class="status-line"><span class="spinner"></span> Generating plan&hellip; ({{ workspace.plan_elapsed_display }})</p>
+  {% elif workspace.plan_status == "failed" %}
+  <p class="status-line error">Plan generation failed.</p>
+  <form method="post" action="/books/{{ workspace.book_id }}/plan?force=true">
+    <button class="mark-complete" type="submit">Retry</button>
+  </form>
+  {% elif workspace.lessons_generating %}
+  <div class="generation-progress">
+    <div class="track"><div class="fill" style="width: {{ (workspace.generated_count / workspace.total_lessons * 100) if workspace.total_lessons else 0 }}%;"></div></div>
+    <p class="status-line">
+      <span class="spinner"></span> Generating lessons&hellip; {{ workspace.generated_count }} of {{ workspace.total_lessons }} done
+      {%- if workspace.current_lesson_title %} &mdash; currently: <em>{{ workspace.current_lesson_title }}</em>{% endif %}
+    </p>
+  </div>
+  {% elif workspace.generated_count < workspace.total_lessons %}
+  <form method="post" action="/books/{{ workspace.book_id }}/lessons/generate">
+    <button class="mark-complete" type="submit">Generate Lessons ({{ workspace.total_lessons }} lessons)</button>
+  </form>
+  {% endif %}
+</div>
