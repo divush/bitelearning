@@ -20,24 +20,23 @@ The PDF's raw text is extracted page by page, then the system figures out where 
 2. **Heuristic detection** — if there's no usable outline, the system looks at font size/boldness across the document plus common phrasing ("Chapter 3", "CHAPTER ONE") to guess where new chapters start, while filtering out text that repeats on almost every page (running headers/footers, which would otherwise look like fake "chapters").
 3. **Whole-book fallback** — if neither of the above finds anything usable, the entire PDF is treated as one chapter, so a book is never rejected outright — the result is just coarser.
 
-Once chapters are known, each chapter's text is split into overlapping chunks (roughly 900 tokens each, about 650-700 words, with a small overlap between consecutive chunks) — this is the unit later steps actually feed to the AI, since a whole book at once is too much even for large-context models to reason over precisely.
+Once chapters are known, each chapter's text is split into overlapping chunks (target size and overlap are configurable in `app/config.py` - `CHUNK_TARGET_TOKENS`/`CHUNK_OVERLAP_TOKENS`) — this is the unit later steps actually feed to the AI, since a whole book at once is too much even for large-context models to reason over precisely.
 
 ### 1.3 Chapter summarization
 
 Before a curriculum can be planned, each chapter gets a short AI-written summary — aware of everything summarized so far, so it doesn't just describe the chapter in isolation but notes how it builds on what came before. This is what lets later steps be aware of the *whole* book without re-reading every chunk each time.
 
-**Current limitation:** this step isn't triggered automatically by the UI yet. It has to be run once per book via a script (`scripts/summarize_book.py`) before generating that book's plan — see [§7 Known Limitations](#7-known-limitations--deferred-work).
+This now runs automatically as part of clicking **"Generate Plan"** (§1.4) — it's no longer a separate manual step. It's safe to run every time a plan is (re)generated: chapters that already have a summary are skipped, so an already-summarized book adds no real delay. `scripts/summarize_book.py` still exists for running it standalone if you want to.
 
 ### 1.4 Plan generation
 
-Clicking **"Generate Plan"** on a book's page kicks off the curriculum-design step. It considers:
-- The chapter summaries (whole-book map)
-- Your **Learner Profile** (how you like to learn, in general)
-- That book's **Book Context** (why you're reading *this* book, what you already know, what to focus on or skip)
+Clicking **"Generate Plan"** on a book's page kicks off the curriculum-design step. Behind that one click, two things happen in order:
+1. Any chapter that doesn't have a summary yet gets one first (§1.3) — the page shows a live progress bar ("Summarizing chapters… X of Y done") while this runs, if there's anything left to do.
+2. Once all chapters are summarized, the actual planning call runs, considering: the chapter summaries (whole-book map), your **Learner Profile** (how you like to learn, in general), and that book's **Book Context** (why you're reading *this* book, what you already know, what to focus on or skip). The page switches to a spinner + elapsed-time counter for this part.
 
 Front-matter chapters (cover, copyright, table of contents, part-dividers — anything with fewer than 8 chunks) are excluded from being turned into lessons themselves, but their titles are still shown to the model so it retains a sense of the book's real structure.
 
-The result is an ordered list of lesson topics — a title and a short "what this covers and why it's here" blurb for each — matched to your stated depth/breadth/session-length/tone preferences. No lesson content is written yet; this is purely the table of contents for your personalized version of the book. It runs as one AI call in the background; the page shows a live spinner and elapsed-time counter until it's done.
+The result is an ordered list of lesson topics — a title and a short "what this covers and why it's here" blurb for each — matched to your stated depth/breadth/session-length/tone preferences. No lesson content is written yet; this is purely the table of contents for your personalized version of the book. Both steps run in the background; you don't need to stay on the page.
 
 ### 1.5 Lesson generation
 
@@ -265,8 +264,9 @@ All child rows cascade-delete with their parent at the ORM level (`cascade="all,
 
 ### 4.2 Background generation & live progress
 
-Plan/Lesson generation run via FastAPI's `BackgroundTasks` — the HTTP request returns immediately (redirect), and the actual work continues in a worker thread. There's no separate job-tracking table; the existing `Plan.status`/`Lesson.status` columns are the single source of truth, and they're written *before* the slow work starts (not just after), which is what makes live polling meaningful:
-- Plan Generation: the `Plan` row is created with `status="generating"` and committed before the LLM call, so `created_at` doubles as a reliable "started at" timestamp for the elapsed-time counter shown in the UI.
+Plan/Lesson generation run via FastAPI's `BackgroundTasks` — the HTTP request returns immediately (redirect), and the actual work continues in a worker thread. There's no separate job-tracking table; the existing `Plan.status`/`Lesson.status`/`Chapter.summary` fields are the single source of truth, and they're written *before* the slow work starts (not just after), which is what makes live polling meaningful:
+- Summarization (as part of "Generate Plan"): `book_service.start_plan_generation` drives `summarize_book` to completion before calling `generate_plan` - safe to call unconditionally, since chapters that already have a summary are skipped. Progress is derived, not stored separately: `chapters_total`/`chapters_summarized` in `BookWorkspace` are computed from existing chapter/chunk data (chapters with `chunk_count > 0`, and how many of those have `summary is not None`), giving a "Summarizing chapters… X of Y" progress bar with zero schema changes.
+- Plan Generation: the `Plan` row is created with `status="generating"` and committed before the LLM call, so `created_at` doubles as a reliable "started at" timestamp for the elapsed-time counter shown in the UI once summarization is done.
 - Lesson Generation: each `Lesson.status` flips to `"generating"` and commits immediately before that lesson's generation call, so the UI can show a progress bar, name the lesson currently in flight, and give any lesson that failed a distinct visual marker in the checklist (rather than looking identical to "not started").
 
 **Known gap:** background tasks are in-process and don't survive a server restart. If the server is stopped/crashes mid-generation, whatever lesson was "generating" at that moment stays stuck in that status with nothing actively working on it — the fix so far has been a manual reset (flip that one lesson back to `"planned"` directly in the DB), after which re-triggering "Generate Lessons" picks up cleanly since the skip-logic only skips lessons already `"generated"`.
@@ -349,7 +349,6 @@ Everything the UI can't do yet (see §7) is still available as a CLI script:
 
 ## 7. Known Limitations / Deferred Work
 
-- **Chapter Summarization isn't wired into the UI's "Generate Plan" trigger** — it must be run via `scripts/summarize_book.py` first, or the plan prompt will see empty chapter summaries. This is the single biggest functional gap right now.
 - **No async job queue beyond in-process `BackgroundTasks`** — sufficient at single-user scale, but a job doesn't survive a server restart (see §4.2's known gap).
 - **Add Book / ingestion is wired into the UI; Plan/Lesson generation triggers are wired in; but there's no "regenerate this one lesson" button in the UI yet** (the underlying `--lesson-index` capability exists in the script).
 - **Book titles default to the PDF filename** unless a title is given at upload time — can look messy for awkwardly-named source files.

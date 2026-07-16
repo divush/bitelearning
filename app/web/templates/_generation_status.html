@@ -10,6 +10,11 @@
   <form method="post" action="/books/{{ workspace.book_id }}/plan">
     <button class="mark-complete" type="submit">Generate Plan</button>
   </form>
+  {% elif workspace.plan_status == "generating" and workspace.summarizing_chapters %}
+  <div class="generation-progress">
+    <div class="track"><div class="fill" style="width: {{ (workspace.chapters_summarized / workspace.chapters_total * 100) if workspace.chapters_total else 0 }}%;"></div></div>
+    <p class="status-line"><span class="spinner"></span> Summarizing chapters&hellip; {{ workspace.chapters_summarized }} of {{ workspace.chapters_total }} done</p>
+  </div>
   {% elif workspace.plan_status == "generating" %}
   <p class="status-line"><span class="spinner"></span> Generating plan&hellip; ({{ workspace.plan_elapsed_display }})</p>
   {% elif workspace.plan_status == "failed" %}

@@ -38,6 +38,9 @@ class BookWorkspace:
     lessons_generating: bool
     generated_count: int
     current_lesson_title: str | None  # title of the lesson currently mid-generation, if any
+    chapters_total: int  # chapters with at least one chunk (i.e. eligible for summarization)
+    chapters_summarized: int
+    summarizing_chapters: bool  # true while plan generation is running and not all chapters are summarized yet
 
 
 @dataclass

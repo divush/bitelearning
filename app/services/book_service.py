@@ -11,8 +11,9 @@ from pathlib import Path
 from app.config import BASE_DIR
 from app.generation.lesson_generator import generate_book_lessons
 from app.generation.plan_generator import generate_plan
+from app.generation.summarizer import summarize_book
 from app.ingestion.pipeline import ingest_book
-from app.models import Book, BookContext, LearnerProfile, Lesson, Plan
+from app.models import Book, BookContext, Chapter, Chunk, LearnerProfile, Lesson, Plan
 from app.progress import mark_lesson_complete, mark_lesson_incomplete
 from app.services.dto import (
     BookContextView,
@@ -74,6 +75,16 @@ def get_book_workspace(session, book_id: int) -> BookWorkspace:
         for l in lessons
     ]
 
+    chapters = session.query(Chapter).filter_by(book_id=book_id).all()
+    summarizable_chapters = [
+        c for c in chapters if session.query(Chunk).filter_by(chapter_id=c.id).count() > 0
+    ]
+    chapters_total = len(summarizable_chapters)
+    chapters_summarized = sum(1 for c in summarizable_chapters if c.summary is not None)
+    summarizing_chapters = bool(
+        plan and plan.status == "generating" and chapters_summarized < chapters_total
+    )
+
     plan_elapsed_display = None
     if plan and plan.status == "generating":
         elapsed_seconds = int((datetime.datetime.utcnow() - plan.created_at).total_seconds())
@@ -93,6 +104,9 @@ def get_book_workspace(session, book_id: int) -> BookWorkspace:
         lessons_generating=generating_row is not None,
         generated_count=sum(1 for r in rows if r.is_generated),
         current_lesson_title=generating_row.title if generating_row else None,
+        chapters_total=chapters_total,
+        chapters_summarized=chapters_summarized,
+        summarizing_chapters=summarizing_chapters,
     )
 
 
@@ -168,13 +182,51 @@ def add_book(
     return report.book_id
 
 
+def mark_plan_generating(session, book_id: int, force: bool = False) -> None:
+    """Synchronously flips the Plan row to status="generating" (creating one if
+    needed) using the request-scoped session, before the route returns - so the
+    very next page load already shows real progress instead of the "Generate
+    Plan" button again, rather than waiting for the background task (which now
+    runs Chapter Summarization first and could take real minutes before it gets
+    around to touching this row itself). Mirrors generate_plan's own
+    existing-plan handling (app/generation/plan_generator.py) - only a complete
+    plan without force is a real conflict; anything else is just reused.
+    """
+    existing_plan = session.query(Plan).filter_by(book_id=book_id).one_or_none()
+
+    if existing_plan and existing_plan.status == "complete":
+        if not force:
+            raise ValueError(
+                f"Plan already exists for book {book_id} (plan_id={existing_plan.id}); "
+                "pass force=True to regenerate."
+            )
+        session.delete(existing_plan)
+        session.flush()
+        existing_plan = None
+
+    if existing_plan:
+        existing_plan.status = "generating"
+        session.add(existing_plan)
+    else:
+        session.add(Plan(book_id=book_id, status="generating"))
+
+    session.commit()
+
+
 def start_plan_generation(book_id: int, force: bool = False) -> None:
     """Entry point for BackgroundTasks - runs after the request/response cycle
-    ends, so it owns its own session (generate_plan defaults to one when none is
-    passed) rather than reusing the request-scoped one, which is already closed
-    by the time this runs.
+    ends, so it owns its own session (generate_plan/summarize_book default to one
+    when none is passed) rather than reusing the request-scoped one, which is
+    already closed by the time this runs.
+
+    Runs Chapter Summarization first, since Plan Generation reads Chapter.summary
+    directly - safe to call unconditionally, as summarize_book already skips any
+    chapter that already has a summary, so an already-summarized book costs
+    nothing but a quick scan.
     """
     try:
+        for _ in summarize_book(book_id):
+            pass  # status is persisted per-chapter as summarize_book goes
         generate_plan(book_id, force=force)
     except Exception:
         logger.exception("Plan generation failed for book %s", book_id)

@@ -109,20 +109,31 @@ def generate_plan(
         session.query(Book).filter_by(id=book_id).one()  # raises if book doesn't exist
 
         existing_plan = session.query(Plan).filter_by(book_id=book_id).one_or_none()
-        if existing_plan and not force:
-            raise ValueError(
-                f"Plan already exists for book {book_id} (plan_id={existing_plan.id}); "
-                "pass force=True to regenerate."
-            )
-        if existing_plan and force:
+
+        # Only a *complete* existing plan is a real conflict worth guarding with
+        # force - a "generating"/"failed" row (typically one the web layer's
+        # mark_plan_generating already created as an immediate-feedback marker
+        # before this function even started) is reused, not refused.
+        if existing_plan and existing_plan.status == "complete":
+            if not force:
+                raise ValueError(
+                    f"Plan already exists for book {book_id} (plan_id={existing_plan.id}); "
+                    "pass force=True to regenerate."
+                )
             session.delete(existing_plan)
             session.flush()
+            existing_plan = None
 
-        # Created and committed up front (before the slow LLM call) so a concurrent
-        # reader - e.g. the web UI polling for progress - can see generation is in
-        # flight rather than finding no row at all until it's done.
-        plan = Plan(book_id=book_id, status="generating")
-        session.add(plan)
+        # Committed up front (before the slow LLM call) so a concurrent reader -
+        # e.g. the web UI polling for progress - can see generation is in flight
+        # rather than finding no row at all until it's done.
+        if existing_plan:
+            plan = existing_plan
+            plan.status = "generating"
+            session.add(plan)
+        else:
+            plan = Plan(book_id=book_id, status="generating")
+            session.add(plan)
         session.commit()
 
         try:

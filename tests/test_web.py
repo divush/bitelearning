@@ -11,7 +11,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.models import Base, Book, Lesson, Plan
+from app.models import Base, Book, Chapter, Chunk, Lesson, Plan
 from app.services import book_service
 from app.services.session import get_db
 from app.web.app import app
@@ -235,6 +235,26 @@ def test_trigger_plan_generation_calls_service_and_redirects(monkeypatch):
     assert calls == [(b.id, False)]
 
 
+def test_trigger_plan_generation_shows_generating_immediately(monkeypatch):
+    """The bug this targets: previously the Plan row wasn't created until the
+    background task's generate_plan call actually ran (after summarization),
+    so the page briefly (or for real minutes) showed the button again as if
+    the click hadn't registered. Stubbing start_plan_generation as a no-op
+    means the background task never runs at all here - if the status endpoint
+    still shows "Generating..." it's proof the synchronous mark_plan_generating
+    call in the route itself is what did it, not the background work."""
+    b = _make_book(test_session, "Immediate Feedback Book")
+    test_session.commit()
+
+    monkeypatch.setattr(book_service, "start_plan_generation", lambda book_id, force=False: None)
+
+    client.post(f"/books/{b.id}/plan")
+
+    response = client.get(f"/books/{b.id}/status")
+    assert "Generate Plan" not in response.text
+    assert ("Generating plan" in response.text) or ("Summarizing chapters" in response.text)
+
+
 def test_trigger_plan_generation_passes_force_flag(monkeypatch):
     b = _make_book(test_session, "Trigger Plan Force Book")
     test_session.commit()
@@ -272,6 +292,23 @@ def test_status_endpoint_shows_generating_plan_message():
     assert 'hx-trigger="every 3s"' in response.text
     assert 'class="spinner"' in response.text
     assert re.search(r"\(\d+s\)|\(\d+m \d+s\)", response.text)
+
+
+def test_status_endpoint_shows_summarizing_chapters_progress():
+    b = _make_book(test_session, "Status Summarizing Chapters Book")
+    ch1 = Chapter(book_id=b.id, order_index=0, title="Ch1", start_page=0, end_page=1, summary="already done")
+    ch2 = Chapter(book_id=b.id, order_index=1, title="Ch2", start_page=2, end_page=3, summary=None)
+    test_session.add_all([ch1, ch2])
+    test_session.flush()
+    test_session.add(Chunk(chapter_id=ch1.id, order_index=0, token_count=50, text="x"))
+    test_session.add(Chunk(chapter_id=ch2.id, order_index=0, token_count=50, text="y"))
+    test_session.add(Plan(book_id=b.id, status="generating"))
+    test_session.commit()
+
+    response = client.get(f"/books/{b.id}/status")
+    assert "Summarizing chapters" in response.text
+    assert "1 of 2 done" in response.text
+    assert "Generating plan" not in response.text
 
 
 def test_status_endpoint_shows_failed_plan_and_retry_button():

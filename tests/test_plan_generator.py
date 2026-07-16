@@ -163,6 +163,30 @@ def test_generate_plan_force_replaces_existing_plan():
     assert all_lesson_titles == ["New Lesson"]
 
 
+def test_generate_plan_reuses_pre_existing_generating_plan_row():
+    """Simulates the web layer's mark_plan_generating having already created a
+    "generating" Plan row (for immediate UI feedback) before this function runs -
+    it should be reused, not treated as a conflict requiring force."""
+    session = _make_test_session()
+    book, chapters = _seed_book(session, num_content_chapters=1)
+    real_chapter_id = chapters[1].id
+
+    pre_existing_plan = Plan(book_id=book.id, status="generating")
+    session.add(pre_existing_plan)
+    session.commit()
+    pre_existing_plan_id = pre_existing_plan.id
+
+    stub_plan = BookPlan(
+        lessons=[LessonStub(title="Lesson A", topic_summary="x", source_chapter_ids=[real_chapter_id])]
+    )
+    plan = generate_plan(book.id, model=_StubStructuredModel(stub_plan), session=session)
+
+    assert plan.id == pre_existing_plan_id
+    assert plan.status == "complete"
+    lessons = session.query(Lesson).filter_by(plan_id=plan.id).all()
+    assert [l.title for l in lessons] == ["Lesson A"]
+
+
 def test_generate_plan_shows_generating_status_before_completing():
     session = _make_test_session()
     book, chapters = _seed_book(session, num_content_chapters=1)

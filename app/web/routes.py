@@ -159,8 +159,15 @@ def book_generation_status(request: Request, book_id: int, session=Depends(get_d
 
 @router.post("/books/{book_id}/plan")
 def trigger_plan_generation(
-    book_id: int, background_tasks: BackgroundTasks, force: bool = False
+    book_id: int, background_tasks: BackgroundTasks, force: bool = False, session=Depends(get_db)
 ):
+    try:
+        book_service.mark_plan_generating(session, book_id, force=force)
+    except ValueError:
+        # A complete plan already exists and force wasn't set - nothing to do,
+        # just redirect back to it rather than scheduling wasted background work.
+        return RedirectResponse(url=f"/books/{book_id}", status_code=303)
+
     background_tasks.add_task(book_service.start_plan_generation, book_id, force)
     return RedirectResponse(url=f"/books/{book_id}", status_code=303)
 

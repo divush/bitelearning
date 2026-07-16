@@ -9,8 +9,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DB_PATH = BASE_DIR / os.environ.get("BITELEARNING_DB_PATH", "data/bitelearning.db")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 
-CHUNK_TARGET_TOKENS = 900
-CHUNK_OVERLAP_TOKENS = 100
+CHUNK_TARGET_TOKENS = 5000
+CHUNK_OVERLAP_TOKENS = 1000
 
 SUMMARY_MODEL = "gpt-4.1-mini"
 SUMMARY_MAP_BATCH_TOKENS = 950_000
